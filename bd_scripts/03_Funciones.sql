@@ -1,56 +1,24 @@
--- FUNCTION: public.fn_es_miembro_grupo(character varying, character varying)
+CREATE OR REPLACE FUNCTION fn_es_miembro_grupo(p_correo VARCHAR, p_grupo VARCHAR) RETURNS INTEGER AS $$ 
+BEGIN 
+    IF EXISTS (SELECT 1 FROM Membresia_Grupo WHERE correo_electronico = p_correo AND nombre_grupo = p_grupo AND estado_membresia = 'activo') THEN RETURN 1; ELSE RETURN 0; END IF; 
+END; 
+$$ LANGUAGE plpgsql;
 
--- DROP FUNCTION IF EXISTS public.fn_es_miembro_grupo(character varying, character varying);
+CREATE OR REPLACE FUNCTION fn_calcular_promedio_valoracion_tutor(p_correo VARCHAR) RETURNS NUMERIC AS $$ 
+DECLARE v_promedio NUMERIC; 
+BEGIN 
+    SELECT AVG(calificacion_tutor) INTO v_promedio FROM Tutoria WHERE correo_tutor = p_correo AND estado_tutoria = 'finalizada'; 
+    RETURN COALESCE(v_promedio, 0.0); 
+END; 
+$$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION public.fn_es_miembro_grupo(
-	p_correo character varying,
-	p_nombre_grupo character varying)
-    RETURNS integer
-    LANGUAGE 'plpgsql'
-    COST 100
-    VOLATILE PARALLEL UNSAFE
-AS $BODY$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM Membresia_Grupo
-        WHERE correo_electronico = p_correo 
-        AND nombre_grupo = p_nombre_grupo
-        AND estado_membresia = 'activo'
-        AND (fecha_salida IS NULL OR fecha_salida > CURRENT_DATE)
-    ) THEN
-        RETURN 1;
-    ELSE
-        RETURN 0;
-    END IF;
-END;
-$BODY$;
-
-ALTER FUNCTION public.fn_es_miembro_grupo(character varying, character varying)
-    OWNER TO postgres;
-
--- FUNCTION: public.fn_calcular_promedio_valoracion_tutor(character varying)
-
--- DROP FUNCTION IF EXISTS public.fn_calcular_promedio_valoracion_tutor(character varying);
-
-CREATE OR REPLACE FUNCTION public.fn_calcular_promedio_valoracion_tutor(
-	p_correo_tutor character varying)
-    RETURNS numeric
-    LANGUAGE 'plpgsql'
-    COST 100
-    VOLATILE PARALLEL UNSAFE
-AS $BODY$
-DECLARE
-    v_promedio NUMERIC(3,2);
-BEGIN
-    SELECT AVG(calificacion_tutor) INTO v_promedio
-    FROM Tutoria
-    WHERE correo_tutor = p_correo_tutor
-    AND estado_tutoria = 'finalizada';
-    
-    RETURN COALESCE(v_promedio, 0.00);
-END;
-$BODY$;
-
-ALTER FUNCTION public.fn_calcular_promedio_valoracion_tutor(character varying)
-    OWNER TO postgres;
-
+-- 3.8 PROCEDIMIENTOS ALMACENADOS
+CREATE OR REPLACE PROCEDURE sp_inscribir_evento(p_correo VARCHAR, p_evento VARCHAR, p_fecha TIMESTAMP) LANGUAGE plpgsql AS $$ 
+DECLARE v_cupo INT; v_ins INT; 
+BEGIN 
+    SELECT cupo_maximo INTO v_cupo FROM Evento WHERE nombre_evento = p_evento AND fecha_inicio = p_fecha; 
+    SELECT COUNT(*) INTO v_ins FROM Asistencia_Evento WHERE nombre_evento = p_evento AND fecha_inicio = p_fecha; 
+    IF v_ins >= v_cupo THEN RAISE EXCEPTION 'Cupo lleno'; END IF; 
+    INSERT INTO Asistencia_Evento (correo_electronico, nombre_evento, fecha_inicio, fue_presente) VALUES (p_correo, p_evento, p_fecha, FALSE); 
+END; 
+$$;
